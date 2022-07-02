@@ -1,0 +1,7 @@
+/.idea/
+/venv/
+/train/
+/test/
+/submit/
+/original.tiff
+/*.zip
