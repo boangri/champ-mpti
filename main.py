@@ -23,7 +23,6 @@ if not os.path.exists('test_dataset_test.zip'):
 
 if not os.path.isdir('test'):
     os.mkdir('test')
-    os.mkdir('test/img')
 
 if not os.path.isdir('submit'):
     os.mkdir('submit')
