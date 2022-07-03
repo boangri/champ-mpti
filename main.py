@@ -38,7 +38,7 @@ if not os.path.isdir('test/img'):
         zip_ref.extractall('test/img')
 
 rf = 2  # resize factor (1, 2, 4)
-step = 2
+step = 3
 astep = 1
 
 h = 1024
