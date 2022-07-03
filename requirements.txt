@@ -2,3 +2,4 @@ numpy==1.23.0
 opencv-python==4.6.0.66
 torch==1.12.0
 typing_extensions==4.3.0
+wget==3.2

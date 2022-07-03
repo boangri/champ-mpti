@@ -6,7 +6,40 @@ import torch
 import torch.nn as nn
 from math import sin, cos, pi, sqrt
 from time import time
+import wget
+import zipfile
 
+if not os.path.exists('train_dataset_train.zip'):
+    print("Грузим train")
+    url1 = 'https://lodmedia.hb.bizmrg.com/case_files/768820/train_dataset_train.zip'
+    path = '.'
+    wget.download(url1, out=path)
+
+if not os.path.exists('test_dataset_test.zip'):
+    print("Грузим test")
+    url2 = 'https://lodmedia.hb.bizmrg.com/case_files/768820/test_dataset_test.zip'
+    path = '.'
+    wget.download(url2, out=path)
+
+# if not os.path.isdir('train'):
+#     os.mkdir('train')
+#     # os.mkdir('train/json')
+#     # os.mkdir('train/test')
+
+if not os.path.isdir('test'):
+    os.mkdir('test')
+    os.mkdir('test/img')
+
+if not os.path.isdir('submit'):
+    os.mkdir('submit')
+
+print("Разархивируем train")
+with zipfile.ZipFile('train_dataset_train.zip', 'r') as zip_ref:
+    zip_ref.extractall('./')
+
+print("Разархивируем test")
+with zipfile.ZipFile('test_dataset_test.zip', 'r') as zip_ref:
+    zip_ref.extractall('test/img')
 
 rf = 4  # resize factor (1, 2, 4)
 step = 4
