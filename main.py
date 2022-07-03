@@ -51,6 +51,13 @@ nk = 400
 train = False
 
 
+def zipdir(path, ziph):
+    # ziph is zipfile handle
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            ziph.write(os.path.join(root, file), file)
+
+
 def get_pad():
     image = cv2.imread("original.tiff")
     pad0 = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -215,3 +222,6 @@ for id in ids:
     filename = f"submit/{id}.json"
     with open(filename, "w") as f:
         json.dump(results[id], f)
+
+with zipfile.ZipFile(f'submit-r{rf}-a{astep}-s{step}.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
+    zipdir('submit/', zf)
