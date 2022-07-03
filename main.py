@@ -21,11 +21,6 @@ if not os.path.exists('test_dataset_test.zip'):
     path = '.'
     wget.download(url2, out=path)
 
-# if not os.path.isdir('train'):
-#     os.mkdir('train')
-#     # os.mkdir('train/json')
-#     # os.mkdir('train/test')
-
 if not os.path.isdir('test'):
     os.mkdir('test')
     os.mkdir('test/img')
@@ -33,13 +28,15 @@ if not os.path.isdir('test'):
 if not os.path.isdir('submit'):
     os.mkdir('submit')
 
-print("Разархивируем train")
-with zipfile.ZipFile('train_dataset_train.zip', 'r') as zip_ref:
-    zip_ref.extractall('./')
+if not os.path.isdir('train/img'):
+    print("Разархивируем train")
+    with zipfile.ZipFile('train_dataset_train.zip', 'r') as zip_ref:
+        zip_ref.extractall('./')
 
-print("Разархивируем test")
-with zipfile.ZipFile('test_dataset_test.zip', 'r') as zip_ref:
-    zip_ref.extractall('test/img')
+if not os.path.isdir('test/img'):
+    print("Разархивируем test")
+    with zipfile.ZipFile('test_dataset_test.zip', 'r') as zip_ref:
+        zip_ref.extractall('test/img')
 
 rf = 4  # resize factor (1, 2, 4)
 step = 4
