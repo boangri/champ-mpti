@@ -37,9 +37,9 @@ if not os.path.isdir('test/img'):
     with zipfile.ZipFile('test_dataset_test.zip', 'r') as zip_ref:
         zip_ref.extractall('test/img')
 
-rf = 4  # resize factor (1, 2, 4)
-step = 4
-astep = 3
+rf = 2  # resize factor (1, 2, 4)
+step = 2
+astep = 1
 
 h = 1024
 H = 10496
