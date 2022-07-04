@@ -24,9 +24,6 @@ if not os.path.exists('test_dataset_test.zip'):
 if not os.path.isdir('test'):
     os.mkdir('test')
 
-if not os.path.isdir('submit'):
-    os.mkdir('submit')
-
 if not os.path.isdir('train/img'):
     print("Разархивируем train")
     with zipfile.ZipFile('train_dataset_train.zip', 'r') as zip_ref:
@@ -37,21 +34,26 @@ if not os.path.isdir('test/img'):
     with zipfile.ZipFile('test_dataset_test.zip', 'r') as zip_ref:
         zip_ref.extractall('test/img')
 
+if not os.path.isdir('submit'):
+    os.mkdir('submit')
+
 rf = 2  # resize factor (1, 2, 4)
-step = 4
+step = 2
 astep = 1
+batch_size = 100
+check = True
+part = 0
 
 h = 1024
 H = 10496
 h4 = h // rf
 H4 = W4 = H // rf
 print(h4, H4)
-nk = 400
-train = False
+n_img = 400
+img_dir = 'test/img'
 
 
 def zipdir(path, ziph):
-    # ziph is zipfile handle
     for root, dirs, files in os.walk(path):
         for file in files:
             ziph.write(os.path.join(root, file), file)
@@ -65,18 +67,12 @@ def get_pad():
     return (pad0 - m) / s
 
 
-def get_sample(id, train=False):
-    dir = 'train' if train else 'test'
-    image = cv2.imread(f"{dir}/img/{id}.png")
+def get_sample(id):
+    image = cv2.imread(f"{img_dir}/{id}.png")
     sample = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     sample = cv2.resize(sample, (h4, h4))
     m, s = sample.mean().astype(np.float32), sample.std().astype(np.float32)
     return (sample - m) / s
-
-
-# def get_params(id, train=False):
-#     dir = 'train' if train else 'test'
-#     return json.load(open(f"{dir}/json/{id}.json"))
 
 
 def rotate_pad(angle: int, pad=None):
@@ -150,77 +146,83 @@ class MyModel(nn.Module):
         return x
 
 
+start_time = time()
+
 if torch.cuda.is_available():
     device = torch.device('cuda')
 else:
     device = torch.device('cpu')
+    print("ACHTUNG!!! no GPU found !!!")
 print('Device: {}'.format(device))
 
-
-dir = 'train' if train else 'test'
-img_dir = dir + "/img/"
-
 filenames = sorted(os.listdir(img_dir))
-ids = [x.split('.')[0] for x in filenames if x.endswith('png')]
+all_ids = [x.split('.')[0] for x in filenames if x.endswith('png')]
 
-if train:
-    ids = ids[:nk]
+for idx in range(0, n_img, batch_size):
+    if check:
+        if idx != part * batch_size:
+            print(f"Skipping batch {idx}")
+            continue
+    print(f"Start pass {idx} - {idx+batch_size} >>>>>>>>>>>>>>>>>>>>>>")
+    ids = all_ids[idx:idx+batch_size]
+    n = len(ids)
+    print(f"Creating model n={n}, step={step}")
 
-n = len(ids)
-print(f"Creating model n={n}, step={step}")
+    model = MyModel(n=n, step=step)
 
-model = MyModel(n=n, step=step)
+    print(f"Initializing model weights")
+    for i, id in enumerate(ids):
+        snap = get_sample(id)
+        model.conv.weight.data[i, 0] = torch.from_numpy(snap)
+    model.eval()
+    model = model.to(device)
 
-print(f"Initializing model weights")
-for i, id in enumerate(ids):
-    snap = get_sample(id, train=train)
-    model.conv.weight.data[i, 0] = torch.from_numpy(snap)
-model.eval()
-model = model.to(device)
-
-""" Main cycle - create json files in the `sumbit` folder"""
-scores = {}
-results = {}
-for i, id in enumerate(ids):
-    scores[id] = 0.
-    results[id] = {}
-since = time()
-pad0 = get_pad()
-print("Making pad0 took %.1f sec" % (time() - since))
-for angle in range(0, 360, astep):
+    """ Main cycle - create json files in the `sumbit` folder"""
+    scores = {}
+    results = {}
+    for i, id in enumerate(ids):
+        scores[id] = 0.
+        results[id] = {}
     since = time()
-    pad = rotate_pad(angle, pad0)
-    print("Angle=%d Making pad took %.1f sec" % (angle, time() - since))
-    pad = torch.from_numpy(pad).unsqueeze_(0)
-    padc = pad.to(device)
-    since = time()
-    with torch.no_grad():
-        out = model(padc)
-    print("Inference took %.3f sec" % (time() - since))
-    since = time()
-    Ny, Nx = out.shape[1:]
-    print(f"Ny={Ny}, Nx={Nx}")
-    for k, id in enumerate(ids):
-        dat1 = out[k]
-        maxind = torch.argmax(dat1).item()
-        i = maxind // Ny
-        j = maxind % Ny
-        val = dat1[i, j] / h4 / h4
-        if val > scores[id]:
-            scores[id] = val
-            bestX, bestY = j*step, i*step
-            results[id]['left_top'] = get_xy(bestX, bestY, angle)
-            results[id]['right_top'] = get_xy(bestX + h4, bestY, angle)
-            results[id]['left_bottom'] = get_xy(bestX, bestY + h4, angle)
-            results[id]['right_bottom'] = get_xy(bestX + h4, bestY + h4, angle)
-            results[id]['angle'] = angle
-    print("Search took %.3f sec" % (time() - since))
+    pad0 = get_pad()
+    print("Making pad0 took %.1f sec" % (time() - since))
+    for angle in range(0, 360, astep):
+        print("Angle=%d ------------------------------" % angle)
+        since = time()
+        pad = rotate_pad(angle, pad0)
+        print("Making pad took %.1f sec" % (time() - since))
+        pad = torch.from_numpy(pad).unsqueeze_(0)
+        padc = pad.to(device)
+        since = time()
+        with torch.no_grad():
+            out = model(padc)
+        print("Inference took %.3f sec" % (time() - since))
+        since = time()
+        Ny, Nx = out.shape[1:]
+        print(f"Ny={Ny}, Nx={Nx}")
+        for k, id in enumerate(ids):
+            dat1 = out[k]
+            maxind = torch.argmax(dat1).item()
+            i = maxind // Ny
+            j = maxind % Ny
+            val = dat1[i, j] / h4 / h4
+            if val > scores[id]:
+                scores[id] = val
+                bestX, bestY = j*step, i*step
+                results[id]['left_top'] = get_xy(bestX, bestY, angle)
+                results[id]['right_top'] = get_xy(bestX + h4, bestY, angle)
+                results[id]['left_bottom'] = get_xy(bestX, bestY + h4, angle)
+                results[id]['right_bottom'] = get_xy(bestX + h4, bestY + h4, angle)
+                results[id]['angle'] = angle
+        print("Search took %.3f sec" % (time() - since))
     print("------------------------------")
-for id in ids:
-    print("id=%s Score: %.3f" % (id, scores[id]), results[id])
-    filename = f"submit/{id}.json"
-    with open(filename, "w") as f:
-        json.dump(results[id], f)
+    for id in ids:
+        print("id=%s Score: %.3f" % (id, scores[id]), results[id])
+        filename = f"submit/{id}.json"
+        with open(filename, "w") as f:
+            json.dump(results[id], f)
 
 with zipfile.ZipFile(f'submit-r{rf}-a{astep}-s{step}.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
     zipdir('submit/', zf)
+print("Created ", f'kaggle-r{rf}-a{astep}-s{step}.zip')
+print("Finished. It took %.1f secs." % (time() - start_time))
