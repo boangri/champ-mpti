@@ -42,7 +42,7 @@ step = 2
 astep = 1
 batch_size = 100
 check = True
-part = 0
+part = 1
 
 h = 1024
 H = 10496
