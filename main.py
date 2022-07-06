@@ -41,8 +41,8 @@ rf = 2  # resize factor (1, 2, 4)
 step = 2
 astep = 1
 batch_size = 100
-check = True
-part = 3
+check = False
+part = 0
 
 h = 1024
 H = 10496
@@ -64,7 +64,11 @@ def get_pad():
     pad0 = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     pad0 = cv2.resize(pad0, (W4, H4))
     m, s = pad0.mean().astype(np.float32), pad0.std().astype(np.float32)
-    return (pad0 - m) / s
+    pad = (pad0 - m) / s
+    for Y in range(6600 // rf, 7800 // rf):
+        for X in range(9200 // rf, H4):
+            pad[Y, X] = 0.
+    return pad
 
 
 def get_sample(id):
