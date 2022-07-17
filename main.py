@@ -37,20 +37,26 @@ if not os.path.isdir('test/img'):
 if not os.path.isdir('submit'):
     os.mkdir('submit')
 
-rf = 2  # resize factor (1, 2, 4)
+rf = 2 # resize factor (1, 2, 4)
+qf = 64 #
 step = 2
 astep = 1
+cl_th = 10
 batch_size = 100
+train = False
 check = False
 part = 0
 
 h = 1024
 H = 10496
 h4 = h // rf
-H4 = W4 = H // rf
+H4 = H // rf
 print(h4, H4)
 n_img = 400
+qs = h // qf
+sz = qs // rf
 img_dir = 'test/img'
+padfile = 'original.tiff'
 
 
 def zipdir(path, ziph):
@@ -60,23 +66,50 @@ def zipdir(path, ziph):
 
 
 def get_pad():
-    image = cv2.imread("original.tiff")
+    image = cv2.imread(padfile)
     pad0 = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    pad0 = cv2.resize(pad0, (W4, H4))
+    pad0 = cv2.resize(pad0, (H4, H4))
     m, s = pad0.mean().astype(np.float32), pad0.std().astype(np.float32)
     pad = (pad0 - m) / s
-    for Y in range(6600 // rf, 7800 // rf):
-        for X in range(9200 // rf, H4):
-            pad[Y, X] = 0.
     return pad
 
 
-def get_sample(id):
+def get_sample(id, threshold=cl_th, dx=4):
     image = cv2.imread(f"{img_dir}/{id}.png")
     sample = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    sample = cv2.resize(sample, (h4, h4))
-    m, s = sample.mean().astype(np.float32), sample.std().astype(np.float32)
-    return (sample - m) / s
+
+    snap = sample.astype(np.float32)
+    out = np.zeros_like(snap)
+    for y in range(h - dx):
+        for x in range(h - dx):
+            out[y, x] = abs(snap[(y + dx), x] - snap[y, x]) + abs(snap[y, (x + dx)] - snap[y, x])
+    flags = np.zeros((qf, qf), dtype=np.uint8)
+    cnt = 0
+    for j in range(qf):
+        for i in range(qf):
+            clip = out[j * qs:j * qs + qs, i * qs:i * qs + qs]  # вырезаем квадрат со стороной в qf раз меньше.
+            if clip.max() < threshold:  # помечаем квадрат как содержащий облако.
+                flags[j, i] = 1
+                cnt += 1
+
+    sample = cv2.resize(sample, (h4, h4)).astype(np.float32)
+
+    for j in range(qf):
+        for i in range(qf):
+            samp = sample[j * sz:j * sz + sz, i * sz:i * sz + sz]
+            if False:  # flags[j, i]:  # квадраты с облаками зануляем.
+                for k in range(sz):
+                    for n in range(sz):
+                        sample[j * sz + k, i * sz + n] = 0.
+            else:
+                m, s = samp.mean().astype(np.float32), samp.std().astype(np.float32)
+                if s < 1e-3:
+                    s = 1.
+                for k in range(sz):
+                    for n in range(sz):
+                        sample[j * sz + k, i * sz + n] = (sample[j * sz + k, i * sz + n] - m) / s
+
+    return sample, cnt / qf / qf
 
 
 def rotate_pad(angle: int, pad=None):
@@ -175,9 +208,12 @@ for idx in range(0, n_img, batch_size):
     model = MyModel(n=n, step=step)
 
     print(f"Initializing model weights")
+    clouds = {}
     for i, id in enumerate(ids):
-        snap = get_sample(id)
+        snap, clouds[id] = get_sample(id)
+        print('.', end='')
         model.conv.weight.data[i, 0] = torch.from_numpy(snap)
+    print()
     model.eval()
     model = model.to(device)
 
@@ -191,7 +227,7 @@ for idx in range(0, n_img, batch_size):
     pad0 = get_pad()
     print("Making pad0 took %.1f sec" % (time() - since))
     for angle in range(0, 360, astep):
-        print("Angle=%d ------------------------------" % angle)
+        print("Angle=%d %.1f s------------------------------" % (angle, time() - start_time))
         since = time()
         pad = rotate_pad(angle, pad0)
         print("Making pad took %.1f sec" % (time() - since))
@@ -220,13 +256,18 @@ for idx in range(0, n_img, batch_size):
                 results[id]['angle'] = angle
         print("Search took %.3f sec" % (time() - since))
     print("------------------------------")
-    for id in ids:
-        print("id=%s Score: %.3f" % (id, scores[id]), results[id])
+    for k, id in enumerate(ids):
+        print("%03d id=%s Confidence: %.3f Clouds: %.3f" % (k, id, scores[id], clouds[id]))
+        if scores[id] < 1e-4:
+            print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! {id} !!!!!!!!")
+        results[id]['clouds'] = clouds[id]
+        results[id]['confidence'] = scores[id] if type(scores[id]) == float else scores[id].item()
         filename = f"submit/{id}.json"
         with open(filename, "w") as f:
             json.dump(results[id], f)
 
-with zipfile.ZipFile(f'submit-r{rf}-a{astep}-s{step}.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
+zipname = f'submit-q{qf}-r{rf}-a{astep}-s{step}.zip'
+with zipfile.ZipFile(zipname, 'w', zipfile.ZIP_DEFLATED) as zf:
     zipdir('submit/', zf)
-print("Created ", f'kaggle-r{rf}-a{astep}-s{step}.zip')
+print("Created ", zipname)
 print("Finished. It took %.1f secs." % (time() - start_time))
