@@ -40,7 +40,7 @@ if not os.path.isdir('submit'):
 rf = 2 # resize factor (1, 2, 4)
 qf = 64 #
 step = 2
-astep = 315
+astep = 1
 cl_th = 10
 batch_size = 100
 train = False
