@@ -38,7 +38,7 @@ if not os.path.isdir('submit'):
     os.mkdir('submit')
 
 rf = 2 # resize factor (1, 2, 4)
-qf = 64 #
+qf = 128 #
 step = 2
 astep = 1
 cl_th = 10
